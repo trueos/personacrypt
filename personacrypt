@@ -25,7 +25,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 # Source PC-BSD libsh functions
-. /usr/local/share/pcbsd/scripts/functions.sh
+. /usr/local/share/trueos/scripts/functions.sh
 
 # Set the database directory
 PCDBDIR="/var/db/personacrypt"
