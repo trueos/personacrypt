@@ -10,6 +10,7 @@ COMMENT=	Home directory encryption on external devices
 
 LICENSE=	BSD2CLAUSE
 
+WRKSRC_SUBDIR=  src-sh
 USES=		pkgconfig tar:xz
 MAKE_ARGS=	PREFIX=${STAGEDIR}${PREFIX}
 
