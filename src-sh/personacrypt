@@ -105,6 +105,7 @@ list_raw() {
 }
 
 list_available() {
+ USERS=""
  glabel status | grep -v "Name" | grep "gpt/p_" | while read line
  do
    # See if this is a personacrypt label
@@ -112,6 +113,17 @@ list_available() {
    if [ ! -e "${PCDBDIR}/${user}.key" ] ; then continue; fi
    disk="`echo $line | awk '{print $3}'`"
    echo "$user on $disk"
+   USERS="$USERS:::$user:::"
+ done
+
+ # Check for PEFS logins
+ for i in `ls ${PCDBDIR}`
+ do
+   user=`echo $i | sed 's|.key||g'`
+   echo $USERS | grep -q ":::${user}:::"
+   if [ $? -ne 0 ] ; then
+     echo "$user on PEFS"
+   fi
  done
 }
 
