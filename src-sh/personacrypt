@@ -38,11 +38,11 @@ usage: `basename $0` [options]
 Options:
   export   <username>			# Export on-disk key
   import   <keyfile>			# Import on-disk key
-  init     <user> <passfile> <disk>	# Initial setup of username / device
+  init     <user> <pfile> <disk/PEFS>	# Initial setup of username / device
   list     [-r]				# List personacrypt devices, or raw devices
-  mount    <user> <passfile>		# Mount the personacrypt device for username
+  mount    <user> <pfile>		# Mount the personacrypt device for username
   umount   <user>			# Unmount the personacrypt device for username
-  remove   <user> <passfile>		# To remove a users on-disk key, and merge \$HOME
+  remove   <user> <pfile>		# To remove a users on-disk key, and merge \$HOME
 					# back onto the system disk
   tempinit <username> <size>		# Create a temporary \$HOME for the username
   temprem				# Remove the systems temporary \$HOME directory
@@ -60,7 +60,9 @@ needs to already exist on the system, and have the same HOME/UID/GID
 
  ${cmd} init myusername /tmp/mypassword da0
 
-Do the initial setup of myusername's personacrypt device on da0.
+Do the initial setup of myusername's personacrypt device on da0. If using PEFS,
+replace 'da0' with PEFS.
+
 The /tmp/mypassword file has the text-passphrase and will be removed after success.
 
  ${cmd} mount myusername /tmp/mypassword
@@ -116,7 +118,7 @@ list_available() {
 init_user() {
  UNAME="$1" 
  PASSFILE="$2" 
- DISK="$3"
+ TARGET="$3"
  
  if [ -z "$1" -o -z "$2" -o -z "$3" ] ; then
     usage
@@ -145,9 +147,80 @@ init_user() {
  if [ -z "${HDIR}" -o "${HDIR}" = "/" ] ; then
     exit_err "Invalid HOME directory ${HDIR}"
  fi
- LABEL="p_${UNAME}"
  UID=`cat /etc/passwd | grep "^$UNAME:" | cut -d ':' -f 3`
  GID=`cat /etc/passwd | grep "^$UNAME:" | cut -d ':' -f 4`
+
+ # Create the 2nd part of the crypto key
+ echo "Creating key file..."
+ openssl genrsa 2048 2>/dev/null | grep -v "^----" > ${CRYPTFILE}
+ rc_halt "chmod 600 ${CRYPTFILE}"
+
+ if [ "${TARGET}" = "PEFS" ] ; then
+   setup_pefs
+ else
+   setup_geli "$TARGET"
+ fi
+
+ # Let the user know we are done, and to SAVE his key somewhere
+ echo "PersonaCrypt enabled for ${UNAME}"
+ echo ""
+ echo "Your key-fragment is located at ${CRYPTFILE}"
+ echo ""
+ echo "Key fragment:"
+ echo ""
+ cat ${CRYPTFILE}
+ echo ""
+ echo "- PLEASE BACKUP THIS KEY!!! - You can use ${0} export or even print it out for safekeeping"
+
+ exit 0
+}
+
+setup_pefs()
+{
+ echo "Enabling PEFS for $UNAME"
+
+ # Check if we can make a ZFS dataset for PEFS
+ # TODO
+
+ rc_halt "mkdir -p ${HDIR}.pefs/"
+
+ # Create the crypto directory
+ rc_halt "pefs addchain -fZ -j ${PASSFILE} -k ${CRYPTFILE} ${HDIR}.pefs/"
+
+ TMPMNT="/tmp/.${UNAME}_pdir"
+ if [ ! -d "$TMPMNT" ] ; then
+   mkdir $TMPMNT
+ fi
+
+ # Mount the crypto dir
+ rc_halt "pefs mount ${HDIR}.pefs/ ${TMPMNT}"
+ rc_halt "pefs addkey -c -j ${PASSFILE} -k ${CRYPTFILE} ${TMPMNT}"
+
+ echo "Moving data to new encrypted home..."
+ tar cvf - -C ${HDIR} . 2>/dev/null| tar xvpf - -C ${TMPMNT} 2>/dev/null
+ if [ $? -ne 0 ] ; then
+    exit_err "Failed to copy home data..."
+ fi
+
+ sync
+ sleep 0.5
+
+ # Remove the old HOMEDIR data
+ rc_nohalt "rm -rf ${HDIR}" 2>/dev/null
+ rc_nohalt "mkdir ${HDIR}" 2>/dev/null
+ rc_halt "chown -R ${UID}:${GID} ${HDIR}"
+ rc_halt "touch ${HDIR}/.personacrypt-enabled-pefs"
+
+ # Unmount and cleanup
+ rc_halt "umount -f ${TMPMNT}"
+ rc_halt "rmdir ${TMPMNT}"
+}
+
+setup_geli()
+{
+
+ DISK="$1"
+ LABEL="p_${UNAME}"
 
  # Clear the disk drive to setup for partitioning
  echo "Partitioning ${DISK}..."
@@ -157,11 +230,6 @@ init_user() {
  rc_halt "gpart create -s gpt ${DISK}"
  rc_halt "gpart add -a 4k -t freebsd-zfs -l ${LABEL} ${DISK}"
   
- # Create the 2nd part of the crypto key
- echo "Creating disk-key..."
- openssl genrsa 2048 2>/dev/null | grep -v "^----" > ${CRYPTFILE}
- rc_halt "chmod 600 ${CRYPTFILE}"
-
  # Setup GELI on disk
  echo "Enabling GELI on ${DISK}p1"
  rc_halt "geli init -K ${CRYPTFILE} -J ${PASSFILE} ${DISK}p1"
@@ -198,17 +266,6 @@ init_user() {
  rc_halt "zpool export persona_${UNAME}"
  rc_halt "geli stop ${DISK}p1.eli"
 
- # Let the user know we are done, and to SAVE his key somewhere
- echo "PersonaCrypt pool created for ${UNAME}"
- echo ""
- echo "Your disk-key is located at ${CRYPTFILE}"
- echo "Disk Key:"
- echo ""
- cat ${CRYPTFILE}
- echo ""
- echo "- PLEASE BACKUP THIS KEY!!! - You can use ${0} export or even print it out for safekeeping"
- 
- exit 0
 
 }
 
@@ -221,6 +278,26 @@ mount_crypt() {
  if [ ! -e "$2" -o -z "`cat $2`" ] ; then
    echo "Missing passphrase!"
    exit 1
+ fi
+
+ # Get the home-directory of the username
+ HDIR=`cat /etc/passwd | grep "^$UNAME:" | cut -d ':' -f 6`
+ if [ -z "${HDIR}" ]; then
+    exit_err "Invalid username: $UNAME"
+ fi
+ HDIR=`realpath ${HDIR}`
+
+ if [ -d "${HDIR}.pefs" ] ; then
+   mount | grep "on ${HDIR} " | grep -q "pefs"
+   if [ $? -eq 0 ] ; then
+     echo "${UNAME} is already PEFS mounted!"
+     exit 1
+   fi
+
+   # Mounting PEFS
+   rc_halt "pefs mount ${HDIR}.pefs ${HDIR}"
+   rc_halt "pefs addkey -c -j ${PASSFILE} -k ${PCDBDIR}/${UNAME}.key ${HDIR}"
+   exit 0
  fi
 
  # Get the disk name for the alias
@@ -280,6 +357,26 @@ remove_crypt() {
 umount_crypt() {
  UNAME="$1" 
  if [ -z "$1" ] ; then usage; fi
+
+ # Get the home-directory of the username
+ HDIR=`cat /etc/passwd | grep "^$UNAME:" | cut -d ':' -f 6`
+ if [ -z "${HDIR}" ]; then
+    exit_err "Invalid username: $UNAME"
+ fi
+ HDIR=`realpath ${HDIR}`
+
+ # Do PEFS unmount
+ if [ -d "${HDIR}.pefs" ] ; then
+   mount | grep "on ${HDIR} " | grep -q "pefs"
+   if [ $? -ne 0 ] ; then
+     echo "${UNAME} is not PEFS mounted!"
+     exit 1
+   fi
+
+   # Un-mounting PEFS
+   rc_halt "umount ${HDIR}"
+   exit 0
+ fi
 
  # Is this disk mounted?
  GDISK=`zpool status persona_${UNAME} | grep ONLINE | grep -v persona_${UNAME} | grep -v "state:" | awk '{print $1}'`
