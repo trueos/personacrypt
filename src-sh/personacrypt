@@ -137,7 +137,7 @@ init_user() {
  fi
 
  # Check if this user is logged in
- w | grep -q "$UNAME "
+ w | grep -v 'grep' |grep -q "$UNAME "
  if [ $? -eq 0 ] ; then
    exit_err "This user is logged in, please run init on users not currently active"
  fi
@@ -213,10 +213,7 @@ setup_pefs()
  rc_halt "pefs addkey -c -j ${PASSFILE} -k ${CRYPTFILE} ${TMPMNT}"
 
  echo "Moving data to new encrypted home..."
- tar cvf - -C ${HDIR} . 2>/dev/null| tar xvpf - -C ${TMPMNT} 2>/dev/null
- if [ $? -ne 0 ] ; then
-    exit_err "Failed to copy home data..."
- fi
+ tar cvf - -C ${HDIR} . 2>/dev/null | tar xvpf - -C ${TMPMNT} 2>/dev/null
 
  sync
  sleep 0.5
