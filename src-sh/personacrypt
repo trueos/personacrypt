@@ -180,9 +180,13 @@ setup_pefs()
  echo "Enabling PEFS for $UNAME"
 
  # Check if we can make a ZFS dataset for PEFS
- # TODO
+ zpool=`mount | grep 'on / ' | cut -d '/' -f 1`
+ if [ -n "$zpool" ] ; then
+   rc_halt "zfs create -o mountpoint=${HDIR}.pefs ${zpool}${HDIR}.pefs"
+ else
+   rc_halt "mkdir -p ${HDIR}.pefs/"
+ fi
 
- rc_halt "mkdir -p ${HDIR}.pefs/"
 
  # Create the crypto directory
  rc_halt "pefs addchain -fZ -j ${PASSFILE} -k ${CRYPTFILE} ${HDIR}.pefs/"
