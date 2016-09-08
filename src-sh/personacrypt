@@ -225,6 +225,7 @@ setup_pefs()
  rc_halt "touch ${HDIR}/.personacrypt-enabled-pefs"
 
  # Unmount and cleanup
+ rc_halt "pefs flushkeys ${TMPMNT}"
  rc_halt "umount -f ${TMPMNT}"
  rc_halt "rmdir ${TMPMNT}"
 }
@@ -387,7 +388,8 @@ umount_crypt() {
    fi
 
    # Un-mounting PEFS
-   rc_halt "umount ${HDIR}"
+   rc_halt "pefs flushkeys ${HDIR}"
+   rc_halt "umount -f ${HDIR}"
    exit 0
  fi
 
