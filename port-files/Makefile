@@ -10,6 +10,8 @@ COMMENT=	Home directory encryption on external devices
 
 LICENSE=	BSD2CLAUSE
 
+RUN_DEPENDS=	pefs-kmod>=0:sysutils/pefs-kmod
+
 WRKSRC_SUBDIR=  src-sh
 USES=		pkgconfig tar:xz
 MAKE_ARGS=	PREFIX=${STAGEDIR}${PREFIX}
