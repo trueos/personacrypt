@@ -311,6 +311,16 @@ mount_crypt() {
    # Mounting PEFS
    rc_halt "pefs mount ${HDIR}.pefs ${HDIR}"
    rc_halt "pefs addkey -c -j ${PASSFILE} -k ${PCDBDIR}/${UNAME}.key ${HDIR}"
+
+   # Check if we need to stop syncthing
+   sysrc syncthing_enable | grep -q "YES"
+   if [ $? -eq 0 ] ; then
+     sysrc syncthing_user | grep -q ": $UNAME"
+     if [ $? -eq 0 ] ; then
+       service syncthing stop
+     fi
+   fi
+
    exit 0
  fi
 
@@ -390,6 +400,16 @@ umount_crypt() {
    # Un-mounting PEFS
    rc_halt "pefs flushkeys ${HDIR}"
    rc_halt "umount -f ${HDIR}"
+
+   # Check if we need to start syncthing
+   sysrc syncthing_enable | grep -q "YES"
+   if [ $? -eq 0 ] ; then
+     sysrc syncthing_user | grep -q ": $UNAME"
+     if [ $? -eq 0 ] ; then
+       service syncthing start	  
+     fi
+   fi
+
    exit 0
  fi
 
