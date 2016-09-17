@@ -120,8 +120,12 @@ list_available() {
  for i in `ls ${PCDBDIR}`
  do
    user=`echo $i | sed 's|.key||g'`
+   # Get the home-directory of the username
+   HDIR=`cat /etc/passwd | grep "^$user:" | cut -d ':' -f 6`
+   if [ -z "${HDIR}" ]; then continue; fi
+
    echo $USERS | grep -q ":::${user}:::"
-   if [ $? -ne 0 ] ; then
+   if [ $? -ne 0 -a -e "${HDIR}/.personacrypt-enabled-pefs" ] ; then
      echo "$user on PEFS"
    fi
  done
