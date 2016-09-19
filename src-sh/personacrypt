@@ -145,10 +145,12 @@ get_syncthing_status() {
   if [ -z "$APIKEY" ] ; then return 1; fi
 
   # Get the folder ID for the PEFS user
-  FOLDERID=$(curl -X GET -H "X-API-Key: ${APIKEY}" 'http://localhost:8384/rest/system/config' | jq '.folders' | jq 'select(.[].path | index("${HDIR}.pefs/"))' | jq '.[].id' | cut -d '"' -f 2)
+  FOLDERID=$(curl -X GET -H "X-API-Key: ${APIKEY}" 'http://localhost:8384/rest/system/config' 2>/dev/null | jq '.folders' | jq "select(.[].path | index(\"${HDIR}.pefs/\"))" | jq '.[].id' | cut -d '"' -f 2)
   if [ -z "$FOLDERID" ] ; then return 1; fi
 
-  echo "$user on PEFS-%%"
+  NEEDFILES=$(curl -X GET -H "X-API-Key: ${APIKEY}" | jq '.needFiles')
+
+  echo "$user on PEFS ($NEEDFILES)"
 
   return 0
 }
