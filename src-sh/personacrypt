@@ -126,9 +126,31 @@ list_available() {
 
    echo $USERS | grep -q ":::${user}:::"
    if [ $? -ne 0 -a -e "${HDIR}/.personacrypt-enabled-pefs" ] ; then
+     get_syncthing_status
+     if [ $? -eq 0 ] ; then continue; fi
+
      echo "$user on PEFS"
    fi
  done
+}
+
+get_syncthing_status() {
+
+  if [ ! -e "/var/db/syncthing/config.xml" ] ; then return 1; fi
+  grep -q "${HDIR}.pefs/" /var/db/syncthing/config.xml
+  if [ $? -ne 0 ] ; then return 1; fi
+
+  # Get syncthing-status
+  APIKEY=`cat /var/db/syncthing/config.xml | grep apikey | cut -d '>' -f 2 | cut -d '<' -f 1`
+  if [ -z "$APIKEY" ] ; then return 1; fi
+
+  # Get the folder ID for the PEFS user
+  FOLDERID=$(curl -X GET -H "X-API-Key: ${APIKEY}" 'http://localhost:8384/rest/system/config' | jq '.folders' | jq 'select(.[].path | index("${HDIR}.pefs/"))' | jq '.[].id' | cut -d '"' -f 2)
+  if [ -z "$FOLDERID" ] ; then return 1; fi
+
+  echo "$user on PEFS-%%"
+
+  return 0
 }
 
 init_user() {
