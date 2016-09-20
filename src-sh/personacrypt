@@ -504,7 +504,8 @@ export_user()
      APIKEY=`cat /var/db/syncthing/config.xml | grep apikey | cut -d '>' -f 2 | cut -d '<' -f 1`
      CLIENTID=$(syncthing-cli report system | grep "Client ID" | awk '{print $3}')
      FOLDERID=$(curl -X GET -H "X-API-Key: ${APIKEY}" 'http://localhost:8384/rest/system/config' 2>/dev/null | jq '.folders' | jq "select(.[].path | index(\"${HDIR}.pefs/\"))" | jq '.[].id' | cut -d '"' -f 2)
-     if [ -n "$APIKEY" -a -n $CLIENTID -a -n $FOLDERID ] ; then
+     if [ -n "$CLIENTID" -a -n "$FOLDERID" ] ; then
+       echo "Exporting Syncthing ID's"
        echo "$CLIENTID" > ${TMPDIR}/SYNCTHING-CLIENTID
        echo "$FOLDERID" > ${TMPDIR}/SYNCTHING-FOLDERID
      fi
