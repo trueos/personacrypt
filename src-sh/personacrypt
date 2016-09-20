@@ -485,7 +485,7 @@ export_user()
  HDIR=`realpath ${HDIR}`
 
  if [ -e "${HDIR}.pefs/.pefs.db" ] ; then
-   if [ ! -e "${HDIR}/.pefs.db" ] ; then
+   if [ -e "${HDIR}/.pefs.db" ] ; then
      echo "ERROR: Export can only be run while user is not logged in!"
      exit 1
    fi
