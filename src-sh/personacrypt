@@ -463,6 +463,21 @@ export_user()
  fi
  HDIR=`realpath ${HDIR}`
 
+ if [ -e "${HDIR}.pefs/.pefs.db" ] ; then
+   # This is a PEFS encrypt scheme, lets export it
+   TMPDIR=$(mktemp -d /tmp/.PCBUNDLE-XXXXXXXX)
+   if [ ! -e "$TMPDIR" ] ; then exit 1; fi
+   cp ${HDIR}.pefs/.pefs.db ${TMPDIR}/.pefs.db
+   cp ${PCDBDIR}/${UNAME}.key ${TMPDIR}/${UNAME}.key
+   echo "PERSONAUSER: ${UNAME}" > ${TMPDIR}/UNAME
+   echo "PERSONAUID: ${UID}" >${TMPDIR}/UID
+   echo "PERSONAHOME: ${HDIR}" >${TMPDIR}/HDIR
+   tar cvJf /root/${UNAME}.personacrypt -C ${TMPDIR} . >/dev/null 2>/dev/null
+   rm -rf ${TMPDIR}
+   echo "Created export at: /root/${UNAME}.personacrypt"
+   exit 0
+ fi
+
  echo "PERSONAUSER: ${UNAME}"
  echo "PERSONAUID: ${UID}"
  echo "PERSONAHOME: ${HDIR}"
@@ -470,10 +485,55 @@ export_user()
  exit 0
 }
 
+import_pefs_user() {
+  TMPDIR=$(mktemp -d /tmp/.PCBUNDLE-XXXXXXXX)
+  if [ ! -e "$TMPDIR" ] ; then exit 1; fi
+
+  tar xvpf ${IFILE} -C ${TMPDIR} 2>/dev/null >/dev/null
+  if [ $? -ne 0 ] ; then exit 1; fi
+  UNAME=`cat ${TMPDIR}/UNAME`
+  UID=`cat ${TMPDIR}/UID`
+  HDIR=`cat ${TMPDIR}/HDIR`
+
+  LOCALHDIR=`cat /etc/passwd | grep "^$UNAME:" | cut -d ':' -f 6`
+  if [ -z "${HDIR}" ]; then
+    exit_err "Invalid username: ${UNAME}"
+  fi
+  LOCALHDIR=`realpath ${LOCALHDIR}`
+  if [ "${LOCALHDIR}" != "${HDIR}" ] ; then
+    exit_err "User ${UNAME} has wrong HOMEDIR, expected ${LOCALHDIR}, got ${HDIR}"
+  fi
+
+  LOCALUID=`cat /etc/passwd | grep "^$UNAME:" | cut -d ':' -f 3`
+  if [ "${LOCALUID}" != "${UID}" ] ; then
+    exit_err "The username ${UNAME} has the wrong UID, expected ${LOCALUID}, got ${UID}"
+  fi
+
+  if [ ! -d "${HDIR}.pefs" ] ; then
+    rc_halt "mkdir ${HDIR}.pefs"
+    rc_halt "chown $UNAME:$UNAME ${HDIR}.pefs"
+  fi
+
+  rc_halt "cp ${TMPDIR}/.pefs.db ${HDIR}.pefs/.pefs.db"
+  rc_halt "cp ${TMPDIR}/${UNAME}.key ${PCDBDIR}/${UNAME}.key"
+  rc_halt "touch ${HDIR}/.personacrypt-enabled-pefs"
+
+  rm -rf ${TMPDIR}
+
+  return 0
+}
+
 import_user()
 {
  IFILE="$1" 
  if [ -z "$1" ] ; then usage; fi
+
+ file ${IFILE} | grep -q "XZ compressed data"
+ if [ $? -eq 0 ] ; then
+   import_pefs_user
+   exit $?
+ fi
+
  UNAME="`cat $IFILE | grep 'PERSONAUSER: ' | cut -d ' ' -f 2`"
  UID="`cat $IFILE | grep 'PERSONAUID: ' | cut -d ' ' -f 2`"
  HDIR="`cat $IFILE | grep 'PERSONAHOME: ' | cut -d ' ' -f 2`"
