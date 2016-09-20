@@ -148,9 +148,11 @@ get_syncthing_status() {
   FOLDERID=$(curl -X GET -H "X-API-Key: ${APIKEY}" 'http://localhost:8384/rest/system/config' 2>/dev/null | jq '.folders' | jq "select(.[].path | index(\"${HDIR}.pefs/\"))" | jq '.[].id' | cut -d '"' -f 2)
   if [ -z "$FOLDERID" ] ; then return 1; fi
 
-  NEEDFILES=$(curl -X GET -H "X-API-Key: ${APIKEY}" "http://localhost:8384/rest/db/status?folder=${FOLDERID}" 2>/dev/null | jq '.needFiles')
+  curl -X GET -H "X-API-Key: ${APIKEY}" "http://localhost:8384/rest/db/status?folder=${FOLDERID}" 2>/dev/null >/tmp/.personacrypt.$$
+  LOCALFILES=$(cat /tmp/.personacrypt.$$ | jq '.localFiles')
+  GLOBALFILES=$(cat /tmp/.personacrypt.$$ | jq '.globalFiles')
 
-  echo "$user on PEFS ($NEEDFILES)"
+  echo "$user on PEFS (${LOCALFILES}/${GLOBALFILES})"
 
   return 0
 }
