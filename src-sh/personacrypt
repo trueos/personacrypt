@@ -497,7 +497,6 @@ export_user()
    echo "${UNAME}" > ${TMPDIR}/UNAME
    echo "${UID}" >${TMPDIR}/UID
    echo "${HDIR}" >${TMPDIR}/HDIR
-   tar cvJf /root/${UNAME}.personacrypt -C ${TMPDIR} . >/dev/null 2>/dev/null
 
    # Check if the user enabled syncthing
    if [ "`sysrc -n syncthing_user`" = "$UNAME" ] ; then
@@ -511,6 +510,7 @@ export_user()
      fi
    fi
 
+   tar cvJf /root/${UNAME}.personacrypt -C ${TMPDIR} . >/dev/null 2>/dev/null
    rm -rf ${TMPDIR}
    echo "Created export at: /root/${UNAME}.personacrypt"
    exit 0
