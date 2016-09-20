@@ -199,6 +199,9 @@ init_user() {
 
  if [ "${TARGET}" = "PEFS" ] ; then
    setup_pefs
+ elif [ "${TARGET}" = "PEFS+SYNCTHING" ] ; then
+   setup_pefs
+   setup_syncthing
  else
    setup_geli "$TARGET"
  fi
@@ -215,6 +218,24 @@ init_user() {
  echo "- PLEASE BACKUP THIS KEY!!! - You can use ${0} export or even print it out for safekeeping"
 
  exit 0
+}
+
+setup_syncthing()
+{
+  # Enable syncthing
+  rc_halt "sysrc -f /etc/rc.conf syncthing_enable='YES'"
+  rc_halt "sysrc -f /etc/rc.conf syncthing_user=${UNAME}"
+  rc_halt "service syncthing start"
+
+  sleep 5
+
+  CLIENTID=$(syncthing-cli report system | grep "Client ID" | awk '{print $3}')
+  rc_halt "syncthing-cli folders add `uuidgen` ${HDIR}.pefs"
+
+  ## TODO
+  ## Add any FireWall rules for syncthing to play nicely
+  rc_halt "sysrc -f /etc/rc.conf firewall_enable='NO'"
+  rc_nohalt "system ipfw onestop"
 }
 
 setup_pefs()
@@ -464,15 +485,31 @@ export_user()
  HDIR=`realpath ${HDIR}`
 
  if [ -e "${HDIR}.pefs/.pefs.db" ] ; then
+   if [ ! -e "${HDIR}/.pefs.db" ] ; then
+     echo "ERROR: Export can only be run while user is not logged in!"
+     exit 1
+   fi
    # This is a PEFS encrypt scheme, lets export it
    TMPDIR=$(mktemp -d /tmp/.PCBUNDLE-XXXXXXXX)
    if [ ! -e "$TMPDIR" ] ; then exit 1; fi
    cp ${HDIR}.pefs/.pefs.db ${TMPDIR}/.pefs.db
    cp ${PCDBDIR}/${UNAME}.key ${TMPDIR}/${UNAME}.key
-   echo "PERSONAUSER: ${UNAME}" > ${TMPDIR}/UNAME
-   echo "PERSONAUID: ${UID}" >${TMPDIR}/UID
-   echo "PERSONAHOME: ${HDIR}" >${TMPDIR}/HDIR
+   echo "${UNAME}" > ${TMPDIR}/UNAME
+   echo "${UID}" >${TMPDIR}/UID
+   echo "${HDIR}" >${TMPDIR}/HDIR
    tar cvJf /root/${UNAME}.personacrypt -C ${TMPDIR} . >/dev/null 2>/dev/null
+
+   # Check if the user enabled syncthing
+   if [ "`sysrc -n syncthing_user`" = "$UNAME" ] ; then
+     APIKEY=`cat /var/db/syncthing/config.xml | grep apikey | cut -d '>' -f 2 | cut -d '<' -f 1`
+     CLIENTID=$(syncthing-cli report system | grep "Client ID" | awk '{print $3}')
+     FOLDERID=$(curl -X GET -H "X-API-Key: ${APIKEY}" 'http://localhost:8384/rest/system/config' 2>/dev/null | jq '.folders' | jq "select(.[].path | index(\"${HDIR}.pefs/\"))" | jq '.[].id' | cut -d '"' -f 2)
+     if [ -n "$APIKEY" -a -n $CLIENTID -a -n $FOLDERID ] ; then
+       echo "$CLIENTID" > ${TMPDIR}/SYNCTHING-CLIENTID
+       echo "$FOLDERID" > ${TMPDIR}/SYNCTHING-FOLDERID
+     fi
+   fi
+
    rm -rf ${TMPDIR}
    echo "Created export at: /root/${UNAME}.personacrypt"
    exit 0
@@ -517,6 +554,28 @@ import_pefs_user() {
   rc_halt "cp ${TMPDIR}/.pefs.db ${HDIR}.pefs/.pefs.db"
   rc_halt "cp ${TMPDIR}/${UNAME}.key ${PCDBDIR}/${UNAME}.key"
   rc_halt "touch ${HDIR}/.personacrypt-enabled-pefs"
+
+  if [ -e "${TMPDIR}/SYNCTHING-CLIENTID" ] ; then
+    MASTERCLIENTID=`cat ${TMPDIR}/SYNCTHING-CLIENTID`
+    FOLDERID=`cat ${TMPDIR}/SYNCTHING-FOLDERID`
+
+    # Enable syncthing
+    rc_halt "sysrc -f /etc/rc.conf syncthing_enable='YES'"
+    rc_halt "sysrc -f /etc/rc.conf syncthing_user=${UNAME}"
+    rc_halt "service syncthing start"
+
+    sleep 5
+    rc_halt "syncthing-cli devices add ${MASTERCLIENTID} pefs-master"
+    rc_halt "syncthing-cli folders add ${FOLDERID} ${HDIR}.pefs"
+    rc_halt "syncthing-cli folders devices add ${FOLDERID} ${MASTERCLIENTID}"
+
+    CLIENTID=$(syncthing-cli report system | grep "Client ID" | awk '{print $3}')
+    echo "Syncthing enabled!"
+    echo "You will need to run the following commands on the master system to authorize the sync:"
+    echo " "
+    echo "# syncthing-cli devices add ${CLIENTID} pefs-client"
+    echo "# syncthing-cli folders devices add ${FOLDERID} ${CLIENTID}"
+  fi
 
   rm -rf ${TMPDIR}
 
