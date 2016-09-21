@@ -155,6 +155,7 @@ list_syncthing_status() {
      get_syncthing_status
    fi
  done
+ return 0
 }
 
 get_syncthing_status() {
@@ -172,8 +173,9 @@ get_syncthing_status() {
   if [ -z "$FOLDERID" ] ; then return 1; fi
 
   curl -X GET -H "X-API-Key: ${APIKEY}" "http://localhost:8384/rest/db/status?folder=${FOLDERID}" 2>/dev/null >/tmp/.personacrypt.$$
-  LOCALFILES=$(cat /tmp/.personacrypt.$$ | jq '.localFiles')
+  NEEDFILES=$(cat /tmp/.personacrypt.$$ | jq '.needFiles')
   GLOBALFILES=$(cat /tmp/.personacrypt.$$ | jq '.globalFiles')
+  LOCALFILES=`expr $GLOBALFILES - $NEEDFILES`
 
   echo "$user on PEFS (${LOCALFILES}/${GLOBALFILES})"
 
@@ -714,6 +716,7 @@ case $1 in
 	      exit $?
 	    elif [ "${2}" = "-s" ] ; then
 	      list_syncthing_status
+	      exit $?
 	    elif [ -n "${2}" ] ; then
 	      usage
 	    fi
