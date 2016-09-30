@@ -454,6 +454,14 @@ remove_crypt() {
  exit 0
 }
 
+umount_all_children()
+{
+  for d in `mount | grep "on ${1}/" | awk '{print $3}' | sort -r`
+  do
+    umount -f ${d}
+  done
+}
+
 umount_crypt() {
  UNAME="$1" 
  if [ -z "$1" ] ; then usage; fi
@@ -472,6 +480,8 @@ umount_crypt() {
      echo "${UNAME} is not PEFS mounted!"
      exit 1
    fi
+
+   umount_all_children "${HDIR}"
 
    # Un-mounting PEFS
    rc_halt "pefs flushkeys ${HDIR}"
@@ -492,6 +502,7 @@ umount_crypt() {
  # Is this disk mounted?
  GDISK=`zpool status persona_${UNAME} | grep ONLINE | grep -v persona_${UNAME} | grep -v "state:" | awk '{print $1}'`
  if [ -z "$GDISK" ] ; then exit_err "No PersonaCrypt device mounted for user: $UNAME" ; fi
+ umount_all_children "${HDIR}"
  rc_halt "zpool export -f persona_${UNAME}"
  rc_halt "geli stop ${GDISK}"
  exit 0
