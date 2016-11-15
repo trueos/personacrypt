@@ -411,7 +411,7 @@ mount_crypt() {
    exit_err "Failed to attach to GELI device.. Wrong password / key file?"
  fi
  rc_halt "rm ${PASSFILE}"
- rc_halt "zpool import -o cachefile=none persona_${UNAME}"
+ rc_halt "zpool import -o cachefile=none -f persona_${UNAME}"
  return 0
 }
 
